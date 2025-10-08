@@ -7,7 +7,7 @@
 
 # testing
 /coverage
-
+/public/output
 # next.js
 /.next/
 /out/
