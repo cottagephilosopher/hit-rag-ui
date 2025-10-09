@@ -99,7 +99,7 @@ rag_preprocessor/
 │   ├── pyproject.toml                 # Python 依赖
 │   └── .env                           # 环境变量（API keys）
 │
-├── rag-visualizer/                    # 前端可视化界面
+├── hit-rag-ui/                    # 前端可视化界面
 │   ├── public/                        # 静态资源
 │   │   └── output/                    # 处理后的 JSON 输出
 │   │       └── *.json                 # Chunk 数据文件
@@ -239,7 +239,7 @@ rag_preprocessor/
 [后端] 返回 202 Accepted（立即返回）
       ↓
 [后台] 执行命令：
-       uv run main.py ../all-md/{filename} -o ../rag-visualizer/public/output/{name}
+       uv run main.py ../all-md/{filename} -o ../hit-rag-ui/public/output/{name}
       ↓
 [后台] 监控处理状态
       ↓
@@ -403,7 +403,7 @@ App.vue (根组件)
   3. 立即返回 `202 Accepted`
   4. 后台执行：
      ```bash
-     uv run main.py ../all-md/{filename} -o ../rag-visualizer/public/output/{name}
+     uv run main.py ../all-md/{filename} -o ../hit-rag-ui/public/output/{name}
      ```
   5. 捕获输出和错误
   6. 更新 `processing_tasks` 状态
@@ -575,7 +575,7 @@ OPENAI_BASE_URL=https://api.openai.com/v1
 
 ```bash
 # 进入前端目录
-cd ../rag-visualizer
+cd ../hit-rag-ui
 
 # 安装依赖
 npm install
@@ -593,7 +593,7 @@ uv run uvicorn api_server:app --reload --port 8000
 
 **终端 2 - 启动前端**：
 ```bash
-cd rag-visualizer
+cd hit-rag-ui
 npm run dev
 ```
 
@@ -615,7 +615,7 @@ lsof -ti :5173 | xargs kill -9 2>/dev/null
 cd hit-rag && uv run uvicorn api_server:app --reload --port 8000 &
 
 # 启动前端
-cd rag-visualizer && npm run dev &
+cd hit-rag-ui && npm run dev &
 
 wait
 ```
@@ -771,7 +771,7 @@ wait
 
 ### 2. 前端显示"数据加载失败"？
 
-- 检查 JSON 文件是否存在：`rag-visualizer/public/output/`
+- 检查 JSON 文件是否存在：`hit-rag-ui/public/output/`
 - 检查文件权限
 - 打开浏览器开发者工具查看网络请求
 
