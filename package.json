@@ -19,7 +19,8 @@
     "@tiptap/vue-3": "^2.1.13",
     "marked": "^12.0.0",
     "tiptap-markdown": "^0.8.10",
-    "vue": "^3.4.21"
+    "vue": "^3.4.21",
+    "vue-router": "^4.5.1"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.4",
