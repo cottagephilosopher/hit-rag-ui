@@ -92,7 +92,7 @@ const props = defineProps({
 
 const emit = defineEmits(['document-selected', 'document-processing', 'open-search', 'open-tag-manager', 'open-chat'])
 
-const API_BASE = 'http://localhost:8000/api'
+import { API_BASE } from '@/utils/config'
 
 const documents = ref([])
 const loading = ref(false)

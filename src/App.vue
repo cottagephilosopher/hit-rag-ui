@@ -107,7 +107,7 @@ import ChatWindow from './components/ChatWindow.vue'
 import { useImageLoader } from './composables/useImageLoader'
 import { useTags } from './composables/useTags'
 import { useHighlight } from './composables/useHighlight'
-import { CONFIG } from './utils/config'
+import { CONFIG, API_BASE } from './utils/config'
 
 // 配置 marked.js
 marked.setOptions({
@@ -158,7 +158,7 @@ async function loadData(jsonPath, filename = null) {
     // 优先从数据库 API 加载（如果提供了 filename）
     if (filename) {
       try {
-        const apiUrl = `http://localhost:8000/api/documents/${encodeURIComponent(filename)}/chunks`
+        const apiUrl = `${API_BASE}/documents/${encodeURIComponent(filename)}/chunks`
         console.log('🔍 尝试从数据库加载:', apiUrl)
         const apiResponse = await fetch(apiUrl)
         if (apiResponse.ok) {

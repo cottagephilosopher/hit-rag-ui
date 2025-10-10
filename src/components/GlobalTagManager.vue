@@ -205,7 +205,7 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'tags-updated'])
 
-const API_BASE = 'http://localhost:8000/api'
+import { API_BASE } from '@/utils/config'
 
 // 数据
 const tags = ref([])

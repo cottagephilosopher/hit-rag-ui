@@ -272,6 +272,7 @@ import TableRow from '@tiptap/extension-table-row'
 import ChunkVersionHistory from './ChunkVersionHistory.vue'
 import StarterKit from '@tiptap/starter-kit'
 import { EditorContent, useEditor } from '@tiptap/vue-3'
+import { API_BASE } from '@/utils/config'
 import { Markdown } from 'tiptap-markdown'
 import { marked } from 'marked'
 import { computed, onBeforeUnmount, onMounted, ref, watch, nextTick } from 'vue'
@@ -656,7 +657,7 @@ async function saveAndClose() {
   // user_tag 保存第一个人工标签（用于兼容性）
   // content_tags 包含所有标签（AI + 人工）
   try {
-    const response = await fetch(`http://localhost:8000/api/chunks/${props.chunk.id}`, {
+    const response = await fetch(`${API_BASE}/chunks/${props.chunk.id}`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json'
@@ -706,7 +707,7 @@ async function markAsDeprecated() {
 
   // 调用后端 API 更新状态
   try {
-    const response = await fetch(`http://localhost:8000/api/chunks/${props.chunk.id}`, {
+    const response = await fetch(`${API_BASE}/chunks/${props.chunk.id}`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json'

@@ -90,6 +90,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { highlightDiff } from '../utils/diffHighlight'
+import { API_BASE } from '@/utils/config'
 
 const props = defineProps({
   chunkId: {
@@ -107,7 +108,7 @@ const loading = ref(false)
 async function fetchLogs() {
   loading.value = true
   try {
-    const response = await fetch(`http://localhost:8000/api/chunks/${props.chunkId}/logs?limit=50`)
+    const response = await fetch(`${API_BASE}/chunks/${props.chunkId}/logs?limit=50`)
     if (!response.ok) throw new Error('Failed to fetch logs')
 
     logs.value = await response.json()
