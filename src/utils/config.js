@@ -1,5 +1,6 @@
 export const CONFIG = {
   baseURL: 'http://localhost:8000',  // API 服务器地址
+  chatURL: 'http://localhost:3000',  // versa-chat-view 聊天窗口地址
   jsonPath: null,  // 首次进入不自动加载，让用户从文档选择器选择
   mdPath: './1-CP Series(CP1.2-W、1.5-W) Product Brochure V2.0-20240722.md',
   colors: [

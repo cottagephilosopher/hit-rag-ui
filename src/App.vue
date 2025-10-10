@@ -14,6 +14,13 @@
       @tags-updated="handleGlobalTagsUpdated"
     />
 
+    <!-- 智能对话窗口 -->
+    <ChatWindow
+      :show="showChatWindow"
+      @close="showChatWindow = false"
+      @view-chunk="handleViewChunkFromChat"
+    />
+
     <!-- 主界面 -->
     <div v-if="!showSemanticSearch" class="header">
       <h1>📊 RAG 文档切分可视化工具</h1>
@@ -41,6 +48,7 @@
         @document-processing="handleDocumentProcessing"
         @open-search="showSemanticSearch = true"
         @open-tag-manager="showGlobalTagManager = true"
+        @open-chat="showChatWindow = true"
       />
 
       <DocumentPanel
@@ -67,6 +75,7 @@
       :get-tag-color="getTagColor"
       @close="closeModal"
       @remove-tag="removeTag"
+      @add-tag="handleAddTag"
     />
 
     <!-- Processing Overlay -->
@@ -94,6 +103,7 @@ import TagManager from './components/TagManager.vue'
 import TagModal from './components/TagModal.vue'
 import SemanticSearch from './components/SemanticSearch.vue'
 import GlobalTagManager from './components/GlobalTagManager.vue'
+import ChatWindow from './components/ChatWindow.vue'
 import { useImageLoader } from './composables/useImageLoader'
 import { useTags } from './composables/useTags'
 import { useHighlight } from './composables/useHighlight'
@@ -133,6 +143,7 @@ const isProcessing = ref(false)
 const processingFilename = ref('')
 const showSemanticSearch = ref(false)
 const showGlobalTagManager = ref(false)
+const showChatWindow = ref(false)
 
 // 处理后的chunks（包含图片处理）
 const processedChunks = ref([])
@@ -326,6 +337,37 @@ async function handleViewChunkFromSearch({ chunk_id, db_id, source_file, documen
       } else {
         highlightChunk(chunk_id, true)
       }
+    }, 100)
+  }
+}
+
+// 处理从对话窗口查看 chunk
+async function handleViewChunkFromChat({ chunk_id, source_file }) {
+  // 关闭对话窗口
+  showChatWindow.value = false
+
+  // 加载对应文档
+  if (source_file) {
+    try {
+      // 更新当前文档名
+      currentDocument.value = source_file
+      documentName.value = source_file
+
+      // 加载文档数据
+      await loadData(null, source_file)
+
+      // 等待数据加载完成后高亮并滚动
+      setTimeout(() => {
+        highlightChunkAndScroll(chunk_id)
+      }, 300)
+    } catch (error) {
+      console.error('加载文档失败:', error)
+      alert(`无法加载文档: ${source_file}`)
+    }
+  } else if (chunk_id) {
+    // 如果没有文件名，尝试在当前文档中查找
+    setTimeout(() => {
+      highlightChunkAndScroll(chunk_id)
     }, 100)
   }
 }

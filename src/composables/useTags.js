@@ -59,6 +59,12 @@ export function useTags() {
       return false
     }
 
+    // 检查标签数量限制
+    if (documentTags.value.length >= CONFIG.maxDocumentTags) {
+      alert(`文档标签数量已达上限（${CONFIG.maxDocumentTags}个），请删除部分标签后再添加`)
+      return false
+    }
+
     if (!currentFilename.value) {
       console.error('❌ 没有选择文档，currentFilename:', currentFilename.value)
       alert('请先选择一个文档')
@@ -91,7 +97,7 @@ export function useTags() {
         return true
       } else {
         const error = await response.json()
-        console.error('❌ 添加标签失败:', response.status, error)
+        console.error('❌ ���加标签失败:', response.status, error)
         alert(`❌ 添加标签失败: ${error.detail || '未知错误'}`)
         return false
       }

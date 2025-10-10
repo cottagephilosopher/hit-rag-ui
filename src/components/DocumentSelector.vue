@@ -3,6 +3,9 @@
     <div v-if="!isCollapsed" class="panel-header">
       📂 文档列表
       <div style="display: flex; gap: 8px;">
+        <button @click="$emit('open-chat')" class="chat-btn" title="智能对话">
+          💬
+        </button>
         <button @click="$emit('open-tag-manager')" class="tag-manager-btn" title="标签管理">
           🏷️
         </button>
@@ -87,7 +90,7 @@ const props = defineProps({
   currentDocument: String
 })
 
-const emit = defineEmits(['document-selected', 'document-processing', 'open-search', 'open-tag-manager'])
+const emit = defineEmits(['document-selected', 'document-processing', 'open-search', 'open-tag-manager', 'open-chat'])
 
 const API_BASE = 'http://localhost:8000/api'
 
@@ -322,6 +325,24 @@ onMounted(() => {
 }
 
 .search-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.8);
+  transform: scale(1.05);
+}
+
+.chat-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  color: white;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s;
+  font-weight: bold;
+}
+
+.chat-btn:hover {
   background: rgba(255, 255, 255, 0.3);
   border-color: rgba(255, 255, 255, 0.8);
   transform: scale(1.05);
