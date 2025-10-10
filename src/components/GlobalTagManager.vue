@@ -24,10 +24,15 @@
 
       <!-- 统计信息 -->
       <div v-if="!loading" class="stats-bar">
-        <span>共 {{ filteredTags.length }} 个标签</span>
-        <span v-if="selectedTags.length > 0" class="selected-count">
-          已选择 {{ selectedTags.length }} 个
-        </span>
+        <div class="stats-left">
+          <span>共 {{ filteredTags.length }} 个标签</span>
+          <span v-if="selectedTags.length > 0" class="selected-count">
+            已选择 {{ selectedTags.length }} 个
+          </span>
+        </div>
+        <button @click="showAddTagDialog" class="add-tag-btn">
+          ➕ 添加标签
+        </button>
       </div>
 
       <!-- 加载状态 -->
@@ -133,6 +138,32 @@
         </div>
       </div>
 
+      <!-- 添加标签对话框 -->
+      <div v-if="addTagDialog.show" class="rename-dialog">
+        <h3>➕ 添加新标签</h3>
+        <p class="dialog-hint">
+          创建一个新的全局标签，用于标记文档切片
+        </p>
+        <input
+          v-model="addTagDialog.tagName"
+          type="text"
+          placeholder="输入标签名称"
+          class="rename-input"
+          @keypress.enter="executeAddTag"
+          ref="addTagInput"
+        />
+        <div class="dialog-actions">
+          <button @click="cancelAddTag" class="cancel-btn">取消</button>
+          <button
+            @click="executeAddTag"
+            :disabled="!addTagDialog.tagName.trim()"
+            class="confirm-btn"
+          >
+            确认添加
+          </button>
+        </div>
+      </div>
+
       <!-- 重命名对话框 -->
       <div v-if="renameDialog.show" class="rename-dialog">
         <h3>重命名标签</h3>
@@ -185,6 +216,14 @@ const selectedTags = ref([])
 const mergeTargetName = ref('')
 const mergeMode = ref(false)
 
+// 添加标签对话框
+const addTagDialog = ref({
+  show: false,
+  tagName: ''
+})
+
+const addTagInput = ref(null)
+
 // 重命名对话框
 const renameDialog = ref({
   show: false,
@@ -224,6 +263,14 @@ watch(() => props.show, (newVal) => {
     loadTags()
     selectedTags.value = []
     mergeTargetName.value = ''
+  }
+})
+
+// 监听添加标签对话框显示
+watch(() => addTagDialog.value.show, async (newVal) => {
+  if (newVal) {
+    await nextTick()
+    addTagInput.value?.focus()
   }
 })
 
@@ -282,6 +329,60 @@ function toggleMergeMode() {
   mergeMode.value = !mergeMode.value
   if (!mergeMode.value) {
     mergeTargetName.value = ''
+  }
+}
+
+function showAddTagDialog() {
+  addTagDialog.value = {
+    show: true,
+    tagName: ''
+  }
+}
+
+function cancelAddTag() {
+  addTagDialog.value.show = false
+}
+
+async function executeAddTag() {
+  const tagName = addTagDialog.value.tagName.trim()
+
+  if (!tagName) {
+    alert('请输入标签名称')
+    return
+  }
+
+  // 检查标签是否已存在
+  if (tags.value.some(tag => tag.name === tagName)) {
+    alert(`标签 "${tagName}" 已存在`)
+    return
+  }
+
+  if (!confirm(`确定要创建新标签 "${tagName}" 吗？\n\n新标签将可用于标记文档切片。`)) {
+    return
+  }
+
+  try {
+    const response = await fetch(`${API_BASE}/tags/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tag_name: tagName })
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || `HTTP ${response.status}`)
+    }
+
+    const result = await response.json()
+    alert(result.message)
+
+    // 重新加载标签
+    await loadTags()
+    addTagDialog.value.show = false
+    emit('tags-updated')
+  } catch (error) {
+    console.error('创建标签失败:', error)
+    alert(`创建标签失败: ${error.message}`)
   }
 }
 
@@ -580,13 +681,41 @@ function close() {
   border-bottom: 1px solid #e1e8ed;
   display: flex;
   justify-content: space-between;
+  align-items: center;
   font-size: 13px;
   color: #7f8c8d;
+}
+
+.stats-left {
+  display: flex;
+  gap: 16px;
+  align-items: center;
 }
 
 .selected-count {
   color: #3498db;
   font-weight: 600;
+}
+
+.add-tag-btn {
+  background: #27ae60;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.add-tag-btn:hover {
+  background: #229954;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(39, 174, 96, 0.3);
 }
 
 .loading-state {
