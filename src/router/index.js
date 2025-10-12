@@ -13,6 +13,12 @@ const routes = [
     name: 'Home',
     component: () => import('../views/Home.vue'),
     meta: { requiresAuth: true }
+  },
+  {
+    path: '/config',
+    name: 'ConfigSettings',
+    component: () => import('../views/ConfigSettings.vue'),
+    meta: { requiresAuth: true }
   }
 ]
 

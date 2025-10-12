@@ -1,8 +1,11 @@
 <template>
   <div class="panel selector" :class="{ collapsed: isCollapsed }">
     <div v-if="!isCollapsed" class="panel-header">
-      📂 文档列表
+      📂 MDList
       <div style="display: flex; gap: 8px;">
+        <button @click="$router.push('/config')" class="config-btn" title="RAG 配置">
+          ⚙️
+        </button>
         <button @click="$emit('open-chat')" class="chat-btn" title="智能对话">
           💬
         </button>
@@ -12,7 +15,7 @@
         <button @click="$emit('open-search')" class="search-btn" title="向量语义搜索">
           🔍
         </button>
-        <button @click="refreshDocuments" class="refresh-btn-small" :disabled="loading">
+        <button @click="refreshDocuments" class="refresh-btn-small" :disabled="loading" hidden>
           {{ loading ? '🔄' : '🔄' }}
         </button>
         <button @click="toggleCollapse" class="collapse-btn" title="收起">
@@ -22,7 +25,7 @@
     </div>
 
     <div v-if="isCollapsed" class="collapsed-tab" @click="toggleCollapse">
-      <span class="tab-text">📂 文档</span>
+      <span class="tab-text">📂 MDList</span>
     </div>
 
     <div v-if="!isCollapsed" class="search-box">
@@ -84,7 +87,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 
 const props = defineProps({
   currentDocument: String
@@ -93,6 +97,8 @@ const props = defineProps({
 const emit = defineEmits(['document-selected', 'document-processing', 'open-search', 'open-tag-manager', 'open-chat'])
 
 import { API_BASE } from '@/utils/config'
+
+const router = useRouter()
 
 const documents = ref([])
 const loading = ref(false)
@@ -325,6 +331,24 @@ onMounted(() => {
 }
 
 .search-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.8);
+  transform: scale(1.05);
+}
+
+.config-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  color: white;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s;
+  font-weight: bold;
+}
+
+.config-btn:hover {
   background: rgba(255, 255, 255, 0.3);
   border-color: rgba(255, 255, 255, 0.8);
   transform: scale(1.05);

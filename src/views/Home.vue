@@ -2,7 +2,7 @@
   <div>
     <!-- 顶部导航栏 -->
     <div class="navbar">
-      <div class="navbar-content">
+      <div class="navbar-content" style="display: none;">
         <h1>📊 RAG 文档切分可视化工具</h1>
         <div class="user-info">
           <span class="username">{{ currentUser }}</span>
@@ -36,7 +36,7 @@
     <div v-if="!showSemanticSearch" class="header">
       <div class="stats">
         <div class="stat-item">
-          <span>📄 文档:</span>
+          <span>📄 MD:</span>
           <span>{{ documentName }}</span>
         </div>
       </div>
@@ -104,22 +104,22 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
 import { marked } from 'marked'
-import { useAuth } from '../composables/useAuth'
-import DocumentSelector from '../components/DocumentSelector.vue'
-import DocumentPanel from '../components/DocumentPanel.vue'
+import { onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import ChatWindow from '../components/ChatWindow.vue'
 import ChunksPanel from '../components/ChunksPanel.vue'
+import DocumentPanel from '../components/DocumentPanel.vue'
+import DocumentSelector from '../components/DocumentSelector.vue'
+import GlobalTagManager from '../components/GlobalTagManager.vue'
+import SemanticSearch from '../components/SemanticSearch.vue'
 import TagManager from '../components/TagManager.vue'
 import TagModal from '../components/TagModal.vue'
-import SemanticSearch from '../components/SemanticSearch.vue'
-import GlobalTagManager from '../components/GlobalTagManager.vue'
-import ChatWindow from '../components/ChatWindow.vue'
+import { useAuth } from '../composables/useAuth'
+import { useHighlight } from '../composables/useHighlight'
 import { useImageLoader } from '../composables/useImageLoader'
 import { useTags } from '../composables/useTags'
-import { useHighlight } from '../composables/useHighlight'
-import { CONFIG, API_BASE } from '../utils/config'
+import { API_BASE, CONFIG } from '../utils/config'
 
 const router = useRouter()
 const { currentUser, logout } = useAuth()
@@ -401,10 +401,47 @@ function handleGlobalTagsUpdated() {
 }
 
 onMounted(() => {
-  // 如果配置中有默认路径，则加载
-  if (CONFIG.jsonPath) {
+  // 检查 URL 参数（用于外部导航）
+  const urlParams = new URLSearchParams(window.location.search)
+  const docParam = urlParams.get('doc')
+  const chunkParam = urlParams.get('chunk')
+
+  if (docParam && chunkParam) {
+    // 从 URL 参数加载文档并定位到指定切块
+    console.log(`📍 从 URL 导航: 文档=${docParam}, 切块=${chunkParam}`)
+    currentDocument.value = docParam
+    documentName.value = docParam
+
+    // 加载文档数据
+    loadData(null, docParam).then(() => {
+      // 等待数据加载完成后高亮并滚动
+      setTimeout(() => {
+        highlightChunkAndScroll(chunkParam)
+      }, 500)
+    })
+  } else if (CONFIG.jsonPath) {
+    // 如果配置中有默认路径，则加载
     loadData(CONFIG.jsonPath)
   }
+
+  // 监听来自 iframe 的消息（聊天窗口点击切块链接）
+  window.addEventListener('message', (event) => {
+    if (event.data.type === 'NAVIGATE_TO_CHUNK') {
+      const { document, chunkDbId } = event.data.payload
+      console.log(`📬 收到 iframe 消息: 文档=${document}, 切块ID=${chunkDbId}`)
+
+      // 更新当前文档
+      currentDocument.value = document
+      documentName.value = document
+
+      // 加载文档并高亮切块
+      loadData(null, document).then(() => {
+        setTimeout(() => {
+          highlightChunkAndScroll(chunkDbId)
+        }, 500)
+      })
+    }
+  })
 })
 </script>
 
