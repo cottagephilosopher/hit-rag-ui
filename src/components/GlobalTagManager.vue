@@ -197,7 +197,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 
 const props = defineProps({
   show: Boolean
@@ -357,9 +357,6 @@ async function executeAddTag() {
     return
   }
 
-  if (!confirm(`确定要创建新标签 "${tagName}" 吗？\n\n新标签将可用于标记文档切片。`)) {
-    return
-  }
 
   try {
     const response = await fetch(`${API_BASE}/tags/create`, {

@@ -41,7 +41,7 @@
               </div>
               <div class="config-input-group">
                 <input
-                  v-if="key === 'ENABLE_CHAT_MODE'"
+                  v-if="key.startsWith('ENABLE_')"
                   type="checkbox"
                   :id="key"
                   v-model="editedConfigs[key]"
@@ -59,9 +59,9 @@
                   @input="markAsChanged"
                   class="config-input"
                 />
-                <span v-if="key === 'ENABLE_CHAT_MODE'" class="config-range">范围: [开 - 关]</span>
+                <span v-if="key.startsWith('ENABLE_')" class="config-range">范围: [开 - 关]</span>
                 <span v-else class="config-range">范围: [{{ config.min_value }} - {{ config.max_value }}]</span>
-                <span v-if="key === 'ENABLE_CHAT_MODE'" class="config-default">默认: 开</span>
+                <span v-if="key.startsWith('ENABLE_')" class="config-default">默认: {{ config.default_value === 1 ? '开' : '关' }}</span>
                 <span v-else class="config-default">默认: {{ config.default_value }}</span>
               </div>
             </div>
