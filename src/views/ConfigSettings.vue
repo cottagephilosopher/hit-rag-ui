@@ -219,6 +219,7 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { success as showSuccess, error as showError } from '../composables/useToast'
 import { API_BASE } from '../utils/config'
 
 const router = useRouter()
@@ -329,11 +330,11 @@ async function saveConfigs() {
     // 重新加载配置
     await loadConfigs()
 
-    alert(`✅ 成功更新 ${result.updated_count} 个配置项`)
+    showSuccess(`成功更新 ${result.updated_count} 个配置项`)
   } catch (err) {
     console.error('❌ 保存配置失败:', err)
     error.value = `保存配置失败: ${err.message}`
-    alert(`❌ 保存失败: ${err.message}`)
+    showError(`保存失败: ${err.message}`)
   } finally {
     isSaving.value = false
   }
@@ -363,11 +364,11 @@ async function resetToDefaults() {
     // 重新加载配置
     await loadConfigs()
 
-    alert(`✅ 成功重置 ${result.updated_count} 个配置项`)
+    showSuccess(`成功重置 ${result.updated_count} 个配置项`)
   } catch (err) {
     console.error('❌ 重置配置失败:', err)
     error.value = `重置配置失败: ${err.message}`
-    alert(`❌ 重置失败: ${err.message}`)
+    showError(`重置失败: ${err.message}`)
   } finally {
     isSaving.value = false
   }
@@ -435,11 +436,11 @@ async function savePrompts() {
 
     await loadPrompts()
 
-    alert(`✅ 成功更新 ${result.updated_count} 个提示词配置`)
+    showSuccess(`成功更新 ${result.updated_count} 个提示词配置`)
   } catch (err) {
     console.error('❌ 保存提示词配置失败:', err)
     error.value = `保存提示词配置失败: ${err.message}`
-    alert(`❌ 保存失败: ${err.message}`)
+    showError(`保存失败: ${err.message}`)
   } finally {
     isSaving.value = false
   }
@@ -468,11 +469,11 @@ async function resetPromptsToDefaults() {
 
     await loadPrompts()
 
-    alert(`✅ 成功重置 ${result.updated_count} 个提示词配置`)
+    showSuccess(`成功重置 ${result.updated_count} 个提示词配置`)
   } catch (err) {
     console.error('❌ 重置提示词配置失败:', err)
     error.value = `重置提示词配置失败: ${err.message}`
-    alert(`❌ 重置失败: ${err.message}`)
+    showError(`重置失败: ${err.message}`)
   } finally {
     isSaving.value = false
   }

@@ -1,10 +1,10 @@
 <template>
   <router-view />
+  <ToastNotification />
 </template>
 
 <script setup>
-// App.vue 现在只负责渲染路由视图
-// 所有业务逻辑已移至 Home.vue
+import ToastNotification from './components/ToastNotification.vue'
 </script>
 
 <style scoped>

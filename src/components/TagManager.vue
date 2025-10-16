@@ -31,6 +31,7 @@
 
 <script setup>
 import { computed } from 'vue'
+import { warning as showWarning } from '../composables/useToast'
 import { CONFIG } from '../utils/config'
 
 const props = defineProps({
@@ -48,7 +49,7 @@ function handleAddTag(event) {
   if (value) {
     // 检查标签数量限制
     if (props.tags.length >= CONFIG.maxDocumentTags) {
-      alert(`文档标签数量已达上限（${CONFIG.maxDocumentTags}个），请删除部分标签后再添加`)
+      showWarning(`文档标签数量已达上限（${CONFIG.maxDocumentTags}个），请删除部分标签后再添加`)
       return
     }
     emit('add-tag', value)

@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { TAG_COLORS, CONFIG } from '../utils/config'
+import { success as showSuccess, error as showError, warning as showWarning } from './useToast'
 
 const API_BASE_URL = CONFIG.baseURL
 
@@ -55,19 +56,19 @@ export function useTags() {
 
     if (documentTags.value.includes(trimmed)) {
       console.log(`⚠️  标签 "${trimmed}" 已存在`)
-      alert(`标签 "${trimmed}" 已存在`)
+      showWarning(`标签 "${trimmed}" 已存在`)
       return false
     }
 
     // 检查标签数量限制
     if (documentTags.value.length >= CONFIG.maxDocumentTags) {
-      alert(`文档标签数量已达上限（${CONFIG.maxDocumentTags}个），请删除部分标签后再添加`)
+      showWarning(`文档标签数量已达上限（${CONFIG.maxDocumentTags}个），请删除部分标签后再添加`)
       return false
     }
 
     if (!currentFilename.value) {
       console.error('❌ 没有选择文档，currentFilename:', currentFilename.value)
-      alert('请先选择一个文档')
+      showWarning('请先选择一个文档')
       return false
     }
 
@@ -93,17 +94,17 @@ export function useTags() {
         documentTags.value.push(trimmed)
         saveTagsToLocalStorage()
         console.log(`✅ 标签添加成功:`, result)
-        alert(`✅ 标签 "${trimmed}" 添加成功`)
+        showSuccess(`标签 "${trimmed}" 添加成功`)
         return true
       } else {
         const error = await response.json()
         console.error('❌ ���加标签失败:', response.status, error)
-        alert(`❌ 添加标签失败: ${error.detail || '未知错误'}`)
+        showError(`添加标签失败: ${error.detail || '未知错误'}`)
         return false
       }
     } catch (error) {
       console.error('❌ 添加标签失败（网络错误）:', error)
-      alert(`❌ 添加标签失败: ${error.message}`)
+      showError(`添加标签失败: ${error.message}`)
       return false
     }
   }

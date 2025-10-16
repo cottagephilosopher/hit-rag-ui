@@ -277,6 +277,7 @@ import { Markdown } from 'tiptap-markdown'
 import { marked } from 'marked'
 import { computed, onBeforeUnmount, onMounted, ref, watch, nextTick } from 'vue'
 import { useLazyImage } from '../composables/useLazyImage'
+import { success as showSuccess, error as showError, warning as showWarning } from '../composables/useToast'
 import { CONFIG } from '../utils/config'
 
 // 配置marked
@@ -478,13 +479,13 @@ function addManualTag() {
 
   if (allTags.includes(tag)) {
     console.warn('⚠️  标签已存在:', tag)
-    alert('标签已存在')
+    showWarning('标签已存在')
     return
   }
 
   // 检查标签数量限制
   if (allTags.length >= CONFIG.maxChunkTags) {
-    alert(`Chunk 标签数量已达上限（${CONFIG.maxChunkTags}个），请删除部分标签后再添加`)
+    showWarning(`Chunk 标签数量已达上限（${CONFIG.maxChunkTags}个），请删除部分标签后再添加`)
     return
   }
 
@@ -541,7 +542,7 @@ function close() {
 
 async function vectorizeChunk() {
   if (hasChanges.value) {
-    alert('请先保存修改后再向量化')
+    showWarning('请先保存修改后再向量化')
     return
   }
 
@@ -582,14 +583,14 @@ async function vectorizeChunk() {
     }
 
     const result = await response.json()
-    alert(`✅ ${result.message}`)
+    showSuccess(result.message)
 
     // 通知父组件刷新数据
     emit('save', { ...props.chunk, status: 2 })
 
   } catch (error) {
     console.error('向量化失败:', error)
-    alert(`❌ 向量化失败: ${error.message}`)
+    showError(`向量化失败: ${error.message}`)
   } finally {
     vectorizing.value = false
   }
@@ -597,7 +598,7 @@ async function vectorizeChunk() {
 
 async function deleteFromVector() {
   if (hasChanges.value) {
-    alert('请先保存修改后再删除')
+    showWarning('请先保存修改后再删除')
     return
   }
 
@@ -619,14 +620,14 @@ async function deleteFromVector() {
     }
 
     const result = await response.json()
-    alert(`✅ ${result.message}`)
+    showSuccess(result.message)
 
     // 通知父组件刷新数据：状态改为 0（初始），清除 milvus_id
     emit('save', { ...props.chunk, status: 0, milvus_id: null })
 
   } catch (error) {
     console.error('从向量库删除失败:', error)
-    alert(`❌ 删除失败: ${error.message}`)
+    showError(`删除失败: ${error.message}`)
   } finally {
     deleting.value = false
   }
@@ -696,7 +697,7 @@ async function saveAndClose() {
     emit('close')
   } catch (error) {
     console.error('保存失败:', error)
-    alert(`保存失败: ${error.message}`)
+    showError(`保存失败: ${error.message}`)
   }
 }
 
@@ -735,7 +736,7 @@ async function markAsDeprecated() {
     emit('close')
   } catch (error) {
     console.error('废弃操作失败:', error)
-    alert(`废弃操作失败: ${error.message}`)
+    showError(`废弃操作失败: ${error.message}`)
   }
 }
 

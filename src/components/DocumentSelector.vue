@@ -89,6 +89,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { error as showError } from '../composables/useToast'
 
 const props = defineProps({
   currentDocument: String
@@ -125,7 +126,7 @@ async function refreshDocuments() {
     documents.value = await response.json()
   } catch (error) {
     console.error('获取文档列表失败:', error)
-    alert(`获取文档列表失败: ${error.message}`)
+    showError(`获取文档列表失败: ${error.message}`)
   } finally {
     loading.value = false
   }
@@ -153,7 +154,7 @@ async function processDocument(doc) {
     pollDocumentStatus(doc.filename)
   } catch (error) {
     console.error('触发处理失败:', error)
-    alert(`触发处理失败: ${error.message}`)
+    showError(`触发处理失败: ${error.message}`)
   }
 }
 

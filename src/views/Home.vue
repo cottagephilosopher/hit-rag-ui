@@ -119,6 +119,7 @@ import { useAuth } from '../composables/useAuth'
 import { useHighlight } from '../composables/useHighlight'
 import { useImageLoader } from '../composables/useImageLoader'
 import { useTags } from '../composables/useTags'
+import { error as showError } from '../composables/useToast'
 import { API_BASE, CONFIG } from '../utils/config'
 
 const router = useRouter()
@@ -241,7 +242,7 @@ async function loadData(jsonPath, filename = null) {
     console.error('数据加载失败:', error)
     // 只在有明确文档选择时才显示错误
     if (filename) {
-      alert(`数据加载失败: ${error.message}`)
+      showError(`数据加载失败: ${error.message}`)
     } else {
       console.log('ℹ️  初始化时没有数据，等待用户选择文档')
     }
@@ -347,7 +348,7 @@ async function handleViewChunkFromSearch({ chunk_id, db_id, source_file, documen
       }, 300)
     } catch (error) {
       console.error('加载文档失败:', error)
-      alert(`无法加载文档: ${source_file}`)
+      showError(`无法加载文档: ${source_file}`)
     }
   } else if (chunk_id) {
     // 如果没有文件名，尝试在当前文档中查找
@@ -382,7 +383,7 @@ async function handleViewChunkFromChat({ chunk_id, source_file }) {
       }, 300)
     } catch (error) {
       console.error('加载文档失败:', error)
-      alert(`无法加载文档: ${source_file}`)
+      showError(`无法加载文档: ${source_file}`)
     }
   } else if (chunk_id) {
     // 如果没有文件名，尝试在当前文档中查找

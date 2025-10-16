@@ -198,6 +198,7 @@
 
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
+import { success as showSuccess, error as showError, warning as showWarning, info as showInfo } from '../composables/useToast'
 
 const props = defineProps({
   show: Boolean
@@ -291,7 +292,7 @@ async function loadTags() {
     tags.value = await response.json()
   } catch (error) {
     console.error('加载标签失败:', error)
-    alert(`加载标签失败: ${error.message}`)
+    showError(`加载标签失败: ${error.message}`)
   } finally {
     loading.value = false
   }
@@ -347,13 +348,13 @@ async function executeAddTag() {
   const tagName = addTagDialog.value.tagName.trim()
 
   if (!tagName) {
-    alert('请输入标签名称')
+    showWarning('请输入标签名称')
     return
   }
 
   // 检查标签是否已存在
   if (tags.value.some(tag => tag.name === tagName)) {
-    alert(`标签 "${tagName}" 已存在`)
+    showWarning(`标签 "${tagName}" 已存在`)
     return
   }
 
@@ -371,7 +372,7 @@ async function executeAddTag() {
     }
 
     const result = await response.json()
-    alert(result.message)
+    showSuccess(result.message)
 
     // 重新加载标签
     await loadTags()
@@ -379,7 +380,7 @@ async function executeAddTag() {
     emit('tags-updated')
   } catch (error) {
     console.error('创建标签失败:', error)
-    alert(`创建标签失败: ${error.message}`)
+    showError(`创建标签失败: ${error.message}`)
   }
 }
 
@@ -403,7 +404,7 @@ async function executeRename() {
   if (!newName) return
 
   if (oldName === newName) {
-    alert('新旧标签名称相同')
+    showWarning('新旧标签名称相同')
     return
   }
 
@@ -424,7 +425,7 @@ async function executeRename() {
     }
 
     const result = await response.json()
-    alert(`✅ ${result.message}`)
+    showSuccess(result.message)
 
     // 重新加载标签
     await loadTags()
@@ -432,7 +433,7 @@ async function executeRename() {
     emit('tags-updated')
   } catch (error) {
     console.error('重命名失败:', error)
-    alert(`重命名失败: ${error.message}`)
+    showError(`重命名失败: ${error.message}`)
   }
 }
 
@@ -454,20 +455,20 @@ async function confirmDelete(tag) {
     }
 
     const result = await response.json()
-    alert(`✅ ${result.message}`)
+    showSuccess(result.message)
 
     // 重新加载标签
     await loadTags()
     emit('tags-updated')
   } catch (error) {
     console.error('删除失败:', error)
-    alert(`删除失败: ${error.message}`)
+    showError(`删除失败: ${error.message}`)
   }
 }
 
 async function showBatchDeleteConfirm() {
   if (selectedTags.value.length === 0) {
-    alert('请先选择要删除的标签')
+    showWarning('请先选择要删除的标签')
     return
   }
 
@@ -514,11 +515,13 @@ async function showBatchDeleteConfirm() {
     }
 
     // 显示结果
-    let message = `✅ 批量删除完成\n\n成功: ${successCount} 个`
+    let message = `批量删除完成\n\n成功: ${successCount} 个`
     if (failCount > 0) {
       message += `\n失败: ${failCount} 个\n\n失败详情:\n${errors.join('\n')}`
+      showWarning(message)
+    } else {
+      showSuccess(message)
     }
-    alert(message)
 
     // 重新加载标签并清除选择
     await loadTags()
@@ -526,7 +529,7 @@ async function showBatchDeleteConfirm() {
     emit('tags-updated')
   } catch (error) {
     console.error('批量删除失败:', error)
-    alert(`批量删除失败: ${error.message}`)
+    showError(`批量删除失败: ${error.message}`)
   }
 }
 
@@ -534,12 +537,12 @@ async function executeMerge() {
   const targetName = mergeTargetName.value.trim()
 
   if (!targetName) {
-    alert('请输入合并后的标签名')
+    showWarning('请输入合并后的标签名')
     return
   }
 
   if (selectedTags.value.length < 2) {
-    alert('至少选择 2 个标签才能合并')
+    showWarning('至少选择 2 个标签才能合并')
     return
   }
 
@@ -574,7 +577,7 @@ async function executeMerge() {
     }
 
     const result = await response.json()
-    alert(`✅ ${result.message}`)
+    showSuccess(result.message)
 
     // 重新加载标签并清除选择
     await loadTags()
@@ -582,7 +585,7 @@ async function executeMerge() {
     emit('tags-updated')
   } catch (error) {
     console.error('合并失败:', error)
-    alert(`合并失败: ${error.message}`)
+    showError(`合并失败: ${error.message}`)
   }
 }
 
