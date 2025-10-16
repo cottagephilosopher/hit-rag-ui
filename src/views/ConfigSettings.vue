@@ -121,6 +121,96 @@
             </div>
           </div>
         </div>
+
+        <!-- 提示词配置 -->
+        <div class="config-section prompt-section">
+          <h2>📝 提示词配置</h2>
+
+          <!-- 变量说明 -->
+          <div class="variable-info">
+            <h3>💡 可用模板变量说明</h3>
+            <p class="info-desc">提示词中可以使用以下变量，系统会在运行时自动替换为实际值：</p>
+
+            <div class="variable-groups">
+              <div class="variable-group">
+                <h4>清洗和标签提示词变量：</h4>
+                <ul>
+                  <li><code v-pre>{{JUNK_FEATURES}}</code> - 杂质特征列表（自动从配置读取）</li>
+                  <li><code v-pre>{{EXISTING_TAGS}}</code> - 系统现有标签列表（动态从数据库获取）</li>
+                  <li><code v-pre>{{CONTENT_TAG_COUNT}}</code> - 内容标签数量（默认: 5）</li>
+                </ul>
+              </div>
+
+              <div class="variable-group">
+                <h4>文档切分提示词变量：</h4>
+                <ul>
+                  <li><code v-pre>{{FINAL_MIN_TOKENS}}</code> - 最小Token数（默认: 300）</li>
+                  <li><code v-pre>{{FINAL_TARGET_TOKENS}}</code> - 目标Token数（默认: 800）</li>
+                  <li><code v-pre>{{FINAL_MAX_TOKENS}}</code> - 建议最大Token数（默认: 2000）</li>
+                  <li><code v-pre>{{FINAL_HARD_LIMIT}}</code> - 硬性上限Token数（默认: 3000）</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="variable-example">
+              <p><strong>示例：</strong></p>
+              <pre v-pre>系统现有标签：{{EXISTING_TAGS}}
+请从以上标签中选择 {{CONTENT_TAG_COUNT}} 个最相关的标签。</pre>
+              <p class="example-result">运行时会自动替换为 →</p>
+              <pre>系统现有标签：技术文档, API文档, 用户手册, 开发指南
+请从以上标签中选择 5 个最相关的标签。</pre>
+            </div>
+          </div>
+
+          <div class="prompt-actions">
+            <button @click="savePrompts" class="btn btn-primary" :disabled="!hasPromptChanges || isSaving">
+              <span v-if="isSaving">💾 保存中...</span>
+              <span v-else>💾 保存提示词</span>
+            </button>
+            <button @click="resetPromptsToDefaults" class="btn btn-secondary" :disabled="isSaving">
+              🔄 恢复默认提示词
+            </button>
+          </div>
+
+          <div v-if="promptsLoading" class="loading-small">
+            <div class="spinner-small">⏳</div>
+            <p>加载提示词配置中...</p>
+          </div>
+
+          <div v-else class="prompt-items">
+            <!-- 清洗和标签提示词 -->
+            <div v-for="(prompt, key) in groupedPrompts.clean_tag" :key="key" class="prompt-item">
+              <div class="prompt-label">
+                <label :for="key">{{ prompt.description }}</label>
+                <span class="prompt-key">{{ key }}</span>
+              </div>
+              <textarea
+                :id="key"
+                v-model="editedPrompts[key]"
+                @input="markPromptAsChanged"
+                class="prompt-textarea"
+                rows="12"
+                placeholder="请输入提示词内容..."
+              ></textarea>
+            </div>
+
+            <!-- 切分提示词 -->
+            <div v-for="(prompt, key) in groupedPrompts.chunk" :key="key" class="prompt-item">
+              <div class="prompt-label">
+                <label :for="key">{{ prompt.description }}</label>
+                <span class="prompt-key">{{ key }}</span>
+              </div>
+              <textarea
+                :id="key"
+                v-model="editedPrompts[key]"
+                @input="markPromptAsChanged"
+                class="prompt-textarea"
+                rows="12"
+                placeholder="请输入提示词内容..."
+              ></textarea>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -145,8 +235,22 @@ const groupedConfigs = ref({
 })
 const hasChanges = ref(false)
 
+// 提示词配置相关
+const promptsLoading = ref(false)
+const originalPrompts = ref({})
+const editedPrompts = ref({})
+const groupedPrompts = ref({
+  clean_tag: {},
+  chunk: {}
+})
+const hasPromptChanges = ref(false)
+
 function markAsChanged() {
   hasChanges.value = true
+}
+
+function markPromptAsChanged() {
+  hasPromptChanges.value = true
 }
 
 async function loadConfigs() {
@@ -271,10 +375,112 @@ async function resetToDefaults() {
 
 async function refreshConfigs() {
   await loadConfigs()
+  await loadPrompts()
+}
+
+async function loadPrompts() {
+  promptsLoading.value = true
+
+  try {
+    const response = await fetch(`${API_BASE}/config/prompts`)
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`)
+    }
+
+    const data = await response.json()
+    groupedPrompts.value = data.grouped || { clean_tag: {}, chunk: {} }
+
+    const allPrompts = data.prompts || {}
+    const promptValues = {}
+
+    for (const [key, prompt] of Object.entries(allPrompts)) {
+      promptValues[key] = prompt.prompt_value
+    }
+
+    originalPrompts.value = JSON.parse(JSON.stringify(promptValues))
+    editedPrompts.value = JSON.parse(JSON.stringify(promptValues))
+    hasPromptChanges.value = false
+
+    console.log('✅ 提示词配置加载成功', promptValues)
+  } catch (err) {
+    console.error('❌ 加载提示词配置失败:', err)
+    error.value = `加载提示词配置失败: ${err.message}`
+  } finally {
+    promptsLoading.value = false
+  }
+}
+
+async function savePrompts() {
+  if (!hasPromptChanges.value) return
+
+  isSaving.value = true
+  error.value = null
+
+  try {
+    const response = await fetch(`${API_BASE}/config/prompts/batch`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ prompts: editedPrompts.value })
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.detail || `HTTP ${response.status}`)
+    }
+
+    const result = await response.json()
+    console.log('✅ 提示词配置保存成功', result)
+
+    await loadPrompts()
+
+    alert(`✅ 成功更新 ${result.updated_count} 个提示词配置`)
+  } catch (err) {
+    console.error('❌ 保存提示词配置失败:', err)
+    error.value = `保存提示词配置失败: ${err.message}`
+    alert(`❌ 保存失败: ${err.message}`)
+  } finally {
+    isSaving.value = false
+  }
+}
+
+async function resetPromptsToDefaults() {
+  if (!confirm('确定要恢复所有提示词为默认值吗？')) {
+    return
+  }
+
+  isSaving.value = true
+  error.value = null
+
+  try {
+    const response = await fetch(`${API_BASE}/config/prompts/reset`, {
+      method: 'POST'
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.detail || `HTTP ${response.status}`)
+    }
+
+    const result = await response.json()
+    console.log('✅ 提示词配置重置成功', result)
+
+    await loadPrompts()
+
+    alert(`✅ 成功重置 ${result.updated_count} 个提示词配置`)
+  } catch (err) {
+    console.error('❌ 重置提示词配置失败:', err)
+    error.value = `重置提示词配置失败: ${err.message}`
+    alert(`❌ 重置失败: ${err.message}`)
+  } finally {
+    isSaving.value = false
+  }
 }
 
 onMounted(() => {
   loadConfigs()
+  loadPrompts()
 })
 </script>
 
@@ -506,5 +712,204 @@ onMounted(() => {
   font-size: 13px;
   color: #95a5a6;
   white-space: nowrap;
+}
+
+/* 提示词配置样式 */
+.prompt-section {
+  margin-top: 24px;
+}
+
+/* 变量说明样式 */
+.variable-info {
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+  border: 2px solid #667eea;
+}
+
+.variable-info h3 {
+  margin: 0 0 12px 0;
+  font-size: 18px;
+  color: #2c3e50;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.info-desc {
+  margin: 0 0 16px 0;
+  color: #555;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.variable-groups {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+@media (max-width: 768px) {
+  .variable-groups {
+    grid-template-columns: 1fr;
+  }
+}
+
+.variable-group {
+  background: white;
+  padding: 16px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.variable-group h4 {
+  margin: 0 0 12px 0;
+  font-size: 15px;
+  color: #667eea;
+  font-weight: 600;
+}
+
+.variable-group ul {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+}
+
+.variable-group li {
+  padding: 6px 0;
+  font-size: 13px;
+  color: #555;
+  line-height: 1.5;
+}
+
+.variable-group code {
+  background: #f0f0f0;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 12px;
+  color: #e74c3c;
+  font-weight: 600;
+}
+
+.variable-example {
+  background: white;
+  padding: 16px;
+  border-radius: 8px;
+  border-left: 4px solid #667eea;
+}
+
+.variable-example p {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  color: #555;
+}
+
+.variable-example strong {
+  color: #667eea;
+}
+
+.example-result {
+  color: #95a5a6 !important;
+  font-style: italic;
+  margin: 12px 0 8px 0 !important;
+}
+
+.variable-example pre {
+  background: #f8f9fa;
+  padding: 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: 'Courier New', Courier, monospace;
+  line-height: 1.6;
+  color: #2c3e50;
+  margin: 8px 0;
+  overflow-x: auto;
+  border: 1px solid #e0e0e0;
+}
+
+.prompt-actions {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.loading-small {
+  text-align: center;
+  padding: 20px;
+}
+
+.spinner-small {
+  font-size: 24px;
+  animation: spin 2s linear infinite;
+}
+
+.prompt-items {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.prompt-item {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.prompt-item:hover {
+  background: #e9ecef;
+}
+
+.prompt-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.prompt-label label {
+  font-size: 16px;
+  font-weight: 600;
+  color: #34495e;
+}
+
+.prompt-key {
+  font-size: 12px;
+  color: #95a5a6;
+  font-family: monospace;
+  background: #e9ecef;
+  padding: 2px 8px;
+  border-radius: 4px;
+  display: inline-block;
+  width: fit-content;
+}
+
+.prompt-textarea {
+  width: 100%;
+  padding: 12px;
+  border: 2px solid #ddd;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: 'Courier New', Courier, monospace;
+  line-height: 1.6;
+  resize: vertical;
+  min-height: 200px;
+  transition: all 0.3s ease;
+  background: white;
+}
+
+.prompt-textarea:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.prompt-textarea::placeholder {
+  color: #bbb;
 }
 </style>
