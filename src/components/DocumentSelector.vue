@@ -1,8 +1,11 @@
 <template>
   <div class="panel selector" :class="{ collapsed: isCollapsed }">
     <div v-if="!isCollapsed" class="panel-header">
-      📂 MDList
+      📂 
       <div style="display: flex; gap: 8px;">
+        <button @click="showUploadDialog = true" class="upload-btn" title="上传文件">
+          📤
+        </button>
         <button @click="$router.push('/config')" class="config-btn" title="RAG 配置">
           ⚙️
         </button>
@@ -83,6 +86,13 @@
         </div>
       </div>
     </div>
+
+    <!-- 文件上传弹窗 -->
+    <FileUploadDialog
+      v-if="showUploadDialog"
+      @close="showUploadDialog = false"
+      @upload-success="handleUploadSuccess"
+    />
   </div>
 </template>
 
@@ -90,6 +100,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { error as showError } from '../composables/useToast'
+import FileUploadDialog from './FileUploadDialog.vue'
 
 const props = defineProps({
   currentDocument: String
@@ -105,6 +116,7 @@ const documents = ref([])
 const loading = ref(false)
 const searchQuery = ref('')
 const isCollapsed = ref(false)
+const showUploadDialog = ref(false)
 
 const filteredDocuments = computed(() => {
   if (!searchQuery.value) return documents.value
@@ -242,6 +254,11 @@ function getStatusText(status) {
   return statusMap[status] || status
 }
 
+function handleUploadSuccess() {
+  showUploadDialog.value = false
+  refreshDocuments()
+}
+
 onMounted(() => {
   refreshDocuments()
 })
@@ -368,6 +385,24 @@ onMounted(() => {
 }
 
 .chat-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.8);
+  transform: scale(1.05);
+}
+
+.upload-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  color: white;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s;
+  font-weight: bold;
+}
+
+.upload-btn:hover {
   background: rgba(255, 255, 255, 0.3);
   border-color: rgba(255, 255, 255, 0.8);
   transform: scale(1.05);
