@@ -44,16 +44,8 @@
       </div>
     </div>
 
-    <div class="chunk-tags" v-if="userTag || aiTags.length > 0 || manualTags.length > 0">
-      <!-- 用户标签（章节标题，蓝色） -->
-      <span
-        v-if="userTag"
-        class="tag user-tag"
-        :title="'章节标题'"
-      >
-        📑 {{ userTag }}
-      </span>
-      <!-- AI 生成的标签（不带 @ 前缀，带圆点） -->
+    <div class="chunk-tags" v-if="aiTags.length > 0 || manualTags.length > 0">
+      <!-- AI 生成的标签（user_tag + content_tags 中不带 @ 前缀，带圆点） -->
       <span
         v-for="tag in aiTags"
         :key="'ai-' + tag"
@@ -62,7 +54,7 @@
       >
         <span class="ai-dot">●</span> {{ tag }}
       </span>
-      <!-- 人工添加的标签（带 @ 前缀，移除前缀显示，无圆点） -->
+      <!-- 人工添加的标签（content_tags 中带 @ 前缀，移除前缀显示，无圆点） -->
       <span
         v-for="tag in manualTags"
         :key="'manual-' + tag"
@@ -96,16 +88,24 @@ defineEmits(['click'])
 const { setupLazyLoadForImages } = useLazyImage()
 const chunkCardRef = ref(null)
 
-// 用户标签（章节标题）
-const userTag = computed(() => {
-  return props.chunk.user_tag || ''
-})
-
 // 分离 AI 标签和人工标签
+// AI 标签来源：1) user_tag 字段（LLM 主标签） 2) content_tags 中不带 @ 前缀的标签
 const aiTags = computed(() => {
-  if (!Array.isArray(props.chunk.content_tags)) return []
-  // AI 标签：不带 @ 前缀
-  return props.chunk.content_tags.filter(tag => !tag.startsWith('@'))
+  if (!Array.isArray(props.chunk.content_tags)) {
+    // 如果没有 content_tags，只返回 user_tag（如果有的话）
+    return props.chunk.user_tag ? [props.chunk.user_tag] : []
+  }
+
+  const aiTagsFromContent = props.chunk.content_tags.filter(tag => !tag.startsWith('@'))
+
+  // 合并 user_tag 和 content_tags 中的 AI 标签（去重）
+  const allAiTags = new Set()
+  if (props.chunk.user_tag) {
+    allAiTags.add(props.chunk.user_tag)
+  }
+  aiTagsFromContent.forEach(tag => allAiTags.add(tag))
+
+  return Array.from(allAiTags)
 })
 
 const manualTags = computed(() => {

@@ -432,22 +432,32 @@ function initializeTags() {
   const contentTags = Array.isArray(props.chunk.content_tags) ? props.chunk.content_tags : []
 
   // 分离 AI 标签和人工标签
-  // AI 标签：不带 @ 前缀
-  // 人工标签：带 @ 前缀
-  aiGeneratedTags.value = contentTags.filter(tag => !tag.startsWith('@'))
+  // AI 标签来源：1) user_tag 字段（LLM 主标签） 2) content_tags 中不带 @ 前缀的标签
+  // 人工标签：content_tags 中带 @ 前缀的标签
+  const aiTagsFromContent = contentTags.filter(tag => !tag.startsWith('@'))
+
+  // 合并 user_tag 和 content_tags 中的 AI 标签（去重）
+  const allAiTags = new Set()
+  if (props.chunk.user_tag) {
+    allAiTags.add(props.chunk.user_tag)
+  }
+  aiTagsFromContent.forEach(tag => allAiTags.add(tag))
+  aiGeneratedTags.value = Array.from(allAiTags)
+
   const manualTagsFromContent = contentTags
     .filter(tag => tag.startsWith('@'))
     .map(tag => tag.substring(1))  // 移除 @ 前缀
 
-  console.log('�� 从 content_tags 中分离出的人工标签:', manualTagsFromContent)
+  console.log('🤖 AI 标签（user_tag + content_tags 不带@）:', aiGeneratedTags.value)
+  console.log('👤 人工标签（content_tags 带@前缀）:', manualTagsFromContent)
 
   // 第一个人工标签设为 userTagInput
   if (manualTagsFromContent.length > 0) {
     userTagInput.value = manualTagsFromContent[0]
     manualTags.value = manualTagsFromContent.slice(1)  // 其余的放到 manualTags
   } else {
-    // 如果没有带前缀的人工标签，尝试从 user_tag 加载
-    userTagInput.value = props.chunk.user_tag || ''
+    // 没有人工标签时，userTagInput 为空
+    userTagInput.value = ''
     manualTags.value = []
   }
 
@@ -642,20 +652,22 @@ async function saveAndClose() {
   console.log('保存的标签 - manualTags:', manualTags.value)
   console.log('保存的标签 - content_tags (AI):', aiGeneratedTags.value)
 
-  // 合并所有标签：AI 标签 + 人工标签
-  // AI 标签保持原样，人工标签添加 @ 前缀用于区分
+  // 合并所有标签：
+  // 1. AI 标签保持原样（无 @ 前缀）- 这些是 LLM 推理出来的，不应算作用户标签
+  // 2. 人工标签添加 @ 前缀用于区分 - 只有人工添加的才算用户标签
   const allManualTags = [userTagInput.value.trim(), ...manualTags.value].filter(Boolean)
   const manualTagsWithPrefix = allManualTags.map(tag => `@${tag}`)
 
-  // 合并到 content_tags 中
+  // 合并到 content_tags 中：AI标签（无前缀）+ 人工标签（带@前缀）
   const finalContentTags = [...aiGeneratedTags.value, ...manualTagsWithPrefix]
 
-  console.log('🔄 所有人工标签（带前缀）:', manualTagsWithPrefix)
+  console.log('🤖 AI 生成的标签（无前缀，不算用户标签）:', aiGeneratedTags.value)
+  console.log('👤 人工添加的标签（带 @ 前缀）:', manualTagsWithPrefix)
   console.log('📌 最终的 content_tags（AI + 人工）:', finalContentTags)
-  console.log('📌 最终的 user_tag（保留第一个人工标签）:', allManualTags[0] || null)
+  console.log('📌 保持原有的 user_tag:', props.chunk.user_tag)
 
   // 调用后端 API 更新 chunk
-  // user_tag 保存第一个人工标签（用于兼容性）
+  // user_tag 保持不变（LLM 生成的主标签）
   // content_tags 包含所有标签（AI + 人工）
   try {
     const response = await fetch(`${API_BASE}/chunks/${props.chunk.id}`, {
@@ -665,7 +677,7 @@ async function saveAndClose() {
       },
       body: JSON.stringify({
         edited_content: updatedContent,
-        user_tag: allManualTags.length > 0 ? allManualTags[0] : null,
+        user_tag: props.chunk.user_tag,  // 保持原有的 user_tag，不用人工标签覆盖
         content_tags: finalContentTags.length > 0 ? finalContentTags : null,
         editor_id: 'user_001'  // 可以后续从用户系统获取
       })
@@ -679,13 +691,10 @@ async function saveAndClose() {
 
     console.log('✅ 后端返回的更新数据:', updatedChunk)
 
-    // 重新计算用于显示的标签（移除 @ 前缀）
-    const allManualTagsForEmit = [userTagInput.value.trim(), ...manualTags.value].filter(Boolean)
-
     const chunkToEmit = {
       ...props.chunk,
       edited_content: updatedContent,
-      user_tag: allManualTagsForEmit.length > 0 ? allManualTagsForEmit[0] : null,
+      user_tag: props.chunk.user_tag,  // 保持原有的 user_tag
       content_tags: finalContentTags,  // 包含 AI 标签和带 @ 前缀的人工标签
       version: updatedChunk.version
     }

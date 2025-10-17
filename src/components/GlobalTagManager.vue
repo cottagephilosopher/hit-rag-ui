@@ -3,8 +3,44 @@
     <div class="tag-manager-modal">
       <!-- Header -->
       <div class="header">
-        <h2>🏷️ 全局标签管理</h2>
+        <h2>🏷️ 标签管理</h2>
         <button @click="close" class="close-btn">×</button>
+      </div>
+
+      <!-- 标签类型切换 -->
+      <div class="tab-switcher">
+        <button
+          :class="['tab-btn', { active: currentTab === 'system' }]"
+          @click="currentTab = 'system'"
+        >
+          🔧 系统标签 (LLM)
+        </button>
+        <button
+          :class="['tab-btn', { active: currentTab === 'user' }]"
+          @click="currentTab = 'user'"
+        >
+          👤 用户标签
+        </button>
+        <button
+          :class="['tab-btn', { active: currentTab === 'document' }]"
+          @click="currentTab = 'document'"
+        >
+          📄 文档标签
+        </button>
+      </div>
+
+      <!-- 说明文字 -->
+      <div class="tab-description">
+        <p v-if="currentTab === 'system'">
+          💡 系统标签用于 LLM 自动生成标签时的候选列表，可在"统一标签管理"中创建或从用户标签转换而来。
+        </p>
+        <p v-else-if="currentTab === 'user'">
+          💡 用户标签是在切片编辑时<strong>手动添加</strong>的标签（带 @ 前缀），不会用于 LLM 生成标签。可点击"转换"按钮将其变为系统标签。<br>
+          <strong>注意</strong>：LLM 自动生成的标签不属于用户标签，不会在此显示。
+        </p>
+        <p v-else>
+          💡 文档标签仅作用于文档，用于向量检索时的过滤条件，不会用于 chunk 标签生成。
+        </p>
       </div>
 
       <!-- 搜索栏和排序 -->
@@ -18,20 +54,16 @@
         <select v-model="sortBy" class="sort-select">
           <option value="count">按使用次数</option>
           <option value="name">按名称 A-Z</option>
-          <option value="type">按类型</option>
         </select>
       </div>
 
       <!-- 统计信息 -->
       <div v-if="!loading" class="stats-bar">
         <div class="stats-left">
-          <span>共 {{ filteredTags.length }} 个标签</span>
-          <span v-if="selectedTags.length > 0" class="selected-count">
-            已选择 {{ selectedTags.length }} 个
-          </span>
+          <span>共 {{ displayTags.length }} 个标签</span>
         </div>
-        <button @click="showAddTagDialog" class="add-tag-btn">
-          ➕ 添加标签
+        <button v-if="currentTab === 'system'" @click="showAddSystemTagDialog" class="add-tag-btn">
+          ➕ 添加系统标签
         </button>
       </div>
 
@@ -43,153 +75,153 @@
 
       <!-- 标签列表 -->
       <div v-else class="tag-list">
+        <!-- 系统标签列表 -->
         <div
-          v-for="tag in filteredTags"
-          :key="tag.name"
+          v-for="tag in displayTags"
+          :key="tag.tag_name || tag.name"
           class="tag-item"
-          :class="{ selected: isSelected(tag.name) }"
         >
-          <!-- 选择框 -->
-          <input
-            type="checkbox"
-            :checked="isSelected(tag.name)"
-            @change="toggleSelect(tag.name)"
-            class="tag-checkbox"
-          />
-
           <!-- 标签信息 -->
           <div class="tag-info">
-            <span class="tag-name">{{ tag.name }}</span>
-            <span class="tag-badge" :class="`type-${tag.type}`">
+            <span class="tag-name">{{ tag.tag_name || tag.name }}</span>
+            <span v-if="currentTab === 'system'" class="tag-badge system-badge">
+              {{ tag.created_by === 'converted_from_user' ? '已转换' : '系统' }}
+            </span>
+            <span v-else-if="currentTab === 'user'" class="tag-badge user-badge">
               {{ getTypeLabel(tag.type) }}
             </span>
-            <span class="tag-count">{{ tag.count }} 个切片</span>
+            <span v-else class="tag-badge doc-badge">文档</span>
+            <span class="tag-count">{{ tag.usage_count || tag.count || tag.document_count || 0 }} 次使用</span>
+            <span v-if="tag.description" class="tag-description">{{ tag.description }}</span>
           </div>
 
           <!-- 操作按钮 -->
           <div class="tag-actions">
-            <button @click="startRename(tag)" class="action-btn rename-btn" title="重命名">
-              ✏️
+            <!-- 用户标签：显示转换按钮 -->
+            <button
+              v-if="currentTab === 'user'"
+              @click="showConvertDialog(tag)"
+              class="action-btn convert-btn"
+              title="转换为系统标签"
+            >
+              🔄 转换
             </button>
-            <button @click="confirmDelete(tag)" class="action-btn delete-btn" title="删除">
+
+            <!-- 系统标签：显示重命名和删除 -->
+            <template v-if="currentTab === 'system'">
+              <button @click="startRenameSystemTag(tag)" class="action-btn rename-btn" title="重命名">
+                ✏️
+              </button>
+              <button @click="confirmDeleteSystemTag(tag)" class="action-btn delete-btn" title="删除">
+                🗑️
+              </button>
+            </template>
+
+            <!-- 用户标签和文档标签：显示删除 -->
+            <button
+              v-if="currentTab !== 'system'"
+              @click="confirmDelete(tag)"
+              class="action-btn delete-btn"
+              title="删除"
+            >
               🗑️
             </button>
           </div>
         </div>
 
-        <div v-if="filteredTags.length === 0" class="empty-state">
+        <div v-if="displayTags.length === 0" class="empty-state">
           <p>{{ searchQuery ? '没有找到匹配的标签' : '暂无标签' }}</p>
         </div>
       </div>
 
-      <!-- 批量操作面板 -->
-      <div v-if="selectedTags.length > 0" class="batch-panel">
-        <div class="batch-header">
-          <h3>批量操作 ({{ selectedTags.length }} 个标签)</h3>
-          <button @click="clearSelection" class="clear-btn">清除选择</button>
-        </div>
-
-        <!-- 批量操作按钮 -->
-        <div class="batch-actions">
-          <button
-            @click="showBatchDeleteConfirm"
-            class="batch-action-btn delete-batch-btn"
-            :disabled="selectedTags.length === 0"
-          >
-            🗑️ 批量删除
-          </button>
-          <button
-            @click="toggleMergeMode"
-            class="batch-action-btn merge-batch-btn"
-            :disabled="selectedTags.length < 2"
-          >
-            🔗 {{ mergeMode ? '取消合并' : '合并标签' }}
-          </button>
-        </div>
-
-        <!-- 合并模式 -->
-        <div v-if="mergeMode" class="merge-section">
-          <p class="merge-hint">
-            将选中的 {{ selectedTags.length }} 个标签合并为：
+      <!-- 添加系统标签对话框 -->
+      <div v-if="addSystemTagDialog.show" class="dialog-overlay" @click.self="cancelAddSystemTag">
+        <div class="dialog-box">
+          <h3>➕ 添加系统标签</h3>
+          <p class="dialog-hint">
+            系统标签将用于 LLM 自动生成标签时的候选列表
           </p>
-          <div class="merge-input-group">
-            <input
-              v-model="mergeTargetName"
-              type="text"
-              placeholder="输入合并后的标签名"
-              class="merge-input"
-              @keypress.enter="executeMerge"
-            />
+          <input
+            v-model="addSystemTagDialog.tagName"
+            type="text"
+            placeholder="输入标签名称"
+            class="dialog-input"
+            @keypress.enter="executeAddSystemTag"
+            ref="addSystemTagInput"
+          />
+          <input
+            v-model="addSystemTagDialog.description"
+            type="text"
+            placeholder="标签描述（可选）"
+            class="dialog-input"
+            @keypress.enter="executeAddSystemTag"
+          />
+          <div class="dialog-actions">
+            <button @click="cancelAddSystemTag" class="cancel-btn">取消</button>
             <button
-              @click="executeMerge"
-              :disabled="!mergeTargetName.trim() || selectedTags.length < 2"
-              class="merge-btn"
+              @click="executeAddSystemTag"
+              :disabled="!addSystemTagDialog.tagName.trim()"
+              class="confirm-btn"
             >
-              确认合并
+              确认添加
             </button>
           </div>
         </div>
+      </div>
 
-        <!-- 已选择的标签预览 -->
-        <div class="selected-tags-preview">
-          <span v-for="tagName in selectedTags" :key="tagName" class="selected-tag">
-            {{ tagName }}
-          </span>
+      <!-- 转换用户标签对话框 -->
+      <div v-if="convertDialog.show" class="dialog-overlay" @click.self="cancelConvert">
+        <div class="dialog-box">
+          <h3>🔄 转换为系统标签</h3>
+          <p class="dialog-hint">
+            将用户标签 <strong>{{ convertDialog.tagName }}</strong> 转换为系统标签后，
+            该标签将可用于 LLM 自动生成标签。
+          </p>
+          <p class="dialog-hint">
+            当前使用次数: {{ convertDialog.count }}
+          </p>
+          <input
+            v-model="convertDialog.description"
+            type="text"
+            placeholder="添加标签描述（可选）"
+            class="dialog-input"
+            @keypress.enter="executeConvert"
+            ref="convertInput"
+          />
+          <div class="dialog-actions">
+            <button @click="cancelConvert" class="cancel-btn">取消</button>
+            <button @click="executeConvert" class="confirm-btn">
+              确认转换
+            </button>
+          </div>
         </div>
       </div>
 
-      <!-- 添加标签对话框 -->
-      <div v-if="addTagDialog.show" class="rename-dialog">
-        <h3>➕ 添加新标签</h3>
-        <p class="dialog-hint">
-          创建一个新的全局标签，用于标记文档切片
-        </p>
-        <input
-          v-model="addTagDialog.tagName"
-          type="text"
-          placeholder="输入标签名称"
-          class="rename-input"
-          @keypress.enter="executeAddTag"
-          ref="addTagInput"
-        />
-        <div class="dialog-actions">
-          <button @click="cancelAddTag" class="cancel-btn">取消</button>
-          <button
-            @click="executeAddTag"
-            :disabled="!addTagDialog.tagName.trim()"
-            class="confirm-btn"
-          >
-            确认添加
-          </button>
-        </div>
-      </div>
-
-      <!-- 重命名对话框 -->
-      <div v-if="renameDialog.show" class="rename-dialog">
-        <h3>重命名标签</h3>
-        <p class="dialog-hint">
-          旧标签名: <strong>{{ renameDialog.oldName }}</strong>
-        </p>
-        <p class="dialog-hint">
-          影响 {{ renameDialog.count }} 个切片
-        </p>
-        <input
-          v-model="renameDialog.newName"
-          type="text"
-          placeholder="输入新标签名"
-          class="rename-input"
-          @keypress.enter="executeRename"
-          ref="renameInput"
-        />
-        <div class="dialog-actions">
-          <button @click="cancelRename" class="cancel-btn">取消</button>
-          <button
-            @click="executeRename"
-            :disabled="!renameDialog.newName.trim()"
-            class="confirm-btn"
-          >
-            确认重命名
-          </button>
+      <!-- 重命名系统标签对话框 -->
+      <div v-if="renameSystemTagDialog.show" class="dialog-overlay" @click.self="cancelRenameSystemTag">
+        <div class="dialog-box">
+          <h3>✏️ 重命名系统标签</h3>
+          <p class="dialog-hint">
+            旧标签名: <strong>{{ renameSystemTagDialog.oldName }}</strong>
+          </p>
+          <input
+            v-model="renameSystemTagDialog.newName"
+            type="text"
+            placeholder="输入新标签名"
+            class="dialog-input"
+            @keypress.enter="executeRenameSystemTag"
+            ref="renameSystemTagInput"
+          />
+          <div class="dialog-actions">
+            <button @click="cancelRenameSystemTag" class="cancel-btn">取消</button>
+            <button
+              @click="executeRenameSystemTag"
+              :disabled="!renameSystemTagDialog.newName.trim()"
+              class="confirm-btn"
+            >
+              确认重命名
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -198,7 +230,8 @@
 
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
-import { success as showSuccess, error as showError, warning as showWarning, info as showInfo } from '../composables/useToast'
+import { success as showSuccess, error as showError, warning as showWarning } from '../composables/useToast'
+import { API_BASE } from '@/utils/config'
 
 const props = defineProps({
   show: Boolean
@@ -206,53 +239,78 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'tags-updated'])
 
-import { API_BASE } from '@/utils/config'
+// 当前选项卡
+const currentTab = ref('system')
 
 // 数据
-const tags = ref([])
+const systemTags = ref([])
+const userTags = ref([])
 const loading = ref(false)
 const searchQuery = ref('')
 const sortBy = ref('count')
-const selectedTags = ref([])
-const mergeTargetName = ref('')
-const mergeMode = ref(false)
 
-// 添加标签对话框
-const addTagDialog = ref({
+// 添加系统标签对话框
+const addSystemTagDialog = ref({
   show: false,
-  tagName: ''
+  tagName: '',
+  description: ''
 })
+const addSystemTagInput = ref(null)
 
-const addTagInput = ref(null)
+// 转换对话框
+const convertDialog = ref({
+  show: false,
+  tagName: '',
+  count: 0,
+  description: ''
+})
+const convertInput = ref(null)
 
-// 重命名对话框
-const renameDialog = ref({
+// 重命名系统标签对话框
+const renameSystemTagDialog = ref({
   show: false,
   oldName: '',
-  newName: '',
-  count: 0
+  newName: ''
 })
+const renameSystemTagInput = ref(null)
 
-const renameInput = ref(null)
+// 计算属性：当前显示的标签列表
+const displayTags = computed(() => {
+  let result = []
 
-// 计算属性
-const filteredTags = computed(() => {
-  let result = tags.value
+  if (currentTab.value === 'system') {
+    // 系统标签（来自 system_tags 表）
+    result = systemTags.value
+  } else if (currentTab.value === 'user') {
+    // 用户手动添加的标签（type 为 user_tag，即带 @ 前缀的标签）
+    result = userTags.value.filter(tag => tag.type === 'user_tag')
+  } else {
+    // 文档标签
+    result = userTags.value.filter(tag => tag.type === 'document_tag' || tag.document_count > 0)
+  }
 
   // 搜索过滤
   if (searchQuery.value) {
     const query = searchQuery.value.toLowerCase()
-    result = result.filter(tag => tag.name.toLowerCase().includes(query))
+    result = result.filter(tag => {
+      const name = tag.tag_name || tag.name
+      return name.toLowerCase().includes(query)
+    })
   }
 
   // 排序
   if (sortBy.value === 'count') {
-    result = [...result].sort((a, b) => b.count - a.count)
+    result = [...result].sort((a, b) => {
+      const countA = a.usage_count || a.count || a.document_count || 0
+      const countB = b.usage_count || b.count || b.document_count || 0
+      return countB - countA
+    })
   } else if (sortBy.value === 'name') {
-    result = [...result].sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'))
-  } else if (sortBy.value === 'type') {
-    const typeOrder = { 'both': 0, 'user_tag': 1, 'content_tag': 2 }
-    result = [...result].sort((a, b) => typeOrder[a.type] - typeOrder[b.type])
+    result = [...result].sort((a, b) => {
+      const nameA = a.tag_name || a.name
+      const nameB = b.tag_name || b.name
+      return nameA.localeCompare(nameB, 'zh-CN')
+    })
   }
 
   return result
@@ -261,35 +319,49 @@ const filteredTags = computed(() => {
 // 监听显示状态
 watch(() => props.show, (newVal) => {
   if (newVal) {
-    loadTags()
-    selectedTags.value = []
-    mergeTargetName.value = ''
+    loadAllTags()
   }
 })
 
-// 监听添加标签对话框显示
-watch(() => addTagDialog.value.show, async (newVal) => {
+// 监听添加系统标签对话框
+watch(() => addSystemTagDialog.value.show, async (newVal) => {
   if (newVal) {
     await nextTick()
-    addTagInput.value?.focus()
+    addSystemTagInput.value?.focus()
   }
 })
 
-// 监听重命名对话框显示
-watch(() => renameDialog.value.show, async (newVal) => {
+// 监听转换对话框
+watch(() => convertDialog.value.show, async (newVal) => {
   if (newVal) {
     await nextTick()
-    renameInput.value?.focus()
+    convertInput.value?.focus()
   }
 })
 
-// 方法
-async function loadTags() {
+// 监听重命名系统标签对话框
+watch(() => renameSystemTagDialog.value.show, async (newVal) => {
+  if (newVal) {
+    await nextTick()
+    renameSystemTagInput.value?.focus()
+  }
+})
+
+// 方法：加载所有标签
+async function loadAllTags() {
   loading.value = true
   try {
-    const response = await fetch(`${API_BASE}/tags/all`)
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    tags.value = await response.json()
+    // 并行加载系统标签和用户标签
+    const [systemResponse, userResponse] = await Promise.all([
+      fetch(`${API_BASE}/system-tags`),
+      fetch(`${API_BASE}/tags/all`)
+    ])
+
+    if (!systemResponse.ok) throw new Error(`加载系统标签失败: HTTP ${systemResponse.status}`)
+    if (!userResponse.ok) throw new Error(`加载用户标签失败: HTTP ${userResponse.status}`)
+
+    systemTags.value = await systemResponse.json()
+    userTags.value = await userResponse.json()
   } catch (error) {
     console.error('加载标签失败:', error)
     showError(`加载标签失败: ${error.message}`)
@@ -302,65 +374,198 @@ function getTypeLabel(type) {
   const labels = {
     'user_tag': '用户',
     'content_tag': '内容',
-    'both': '混合'
+    'multiple': '混合',
+    'document_tag': '文档'
   }
   return labels[type] || type
 }
 
-function isSelected(tagName) {
-  return selectedTags.value.includes(tagName)
-}
-
-function toggleSelect(tagName) {
-  const index = selectedTags.value.indexOf(tagName)
-  if (index > -1) {
-    selectedTags.value.splice(index, 1)
-  } else {
-    selectedTags.value.push(tagName)
-  }
-}
-
-function clearSelection() {
-  selectedTags.value = []
-  mergeTargetName.value = ''
-  mergeMode.value = false
-}
-
-function toggleMergeMode() {
-  mergeMode.value = !mergeMode.value
-  if (!mergeMode.value) {
-    mergeTargetName.value = ''
-  }
-}
-
-function showAddTagDialog() {
-  addTagDialog.value = {
+// 添加系统标签
+function showAddSystemTagDialog() {
+  addSystemTagDialog.value = {
     show: true,
-    tagName: ''
+    tagName: '',
+    description: ''
   }
 }
 
-function cancelAddTag() {
-  addTagDialog.value.show = false
+function cancelAddSystemTag() {
+  addSystemTagDialog.value.show = false
 }
 
-async function executeAddTag() {
-  const tagName = addTagDialog.value.tagName.trim()
+async function executeAddSystemTag() {
+  const tagName = addSystemTagDialog.value.tagName.trim()
+  const description = addSystemTagDialog.value.description.trim()
 
   if (!tagName) {
     showWarning('请输入标签名称')
     return
   }
 
-  // 检查标签是否已存在
-  if (tags.value.some(tag => tag.name === tagName)) {
-    showWarning(`标签 "${tagName}" 已存在`)
+  try {
+    const response = await fetch(`${API_BASE}/system-tags`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tag_name: tagName, description: description || null })
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || `HTTP ${response.status}`)
+    }
+
+    const result = await response.json()
+    showSuccess(result.message || '系统标签创建成功')
+
+    await loadAllTags()
+    addSystemTagDialog.value.show = false
+    emit('tags-updated')
+  } catch (error) {
+    console.error('创建系统标签失败:', error)
+    showError(`创建系统标签失败: ${error.message}`)
+  }
+}
+
+// 转换用户标签为系统标签
+function showConvertDialog(tag) {
+  convertDialog.value = {
+    show: true,
+    tagName: tag.name,
+    count: tag.count || 0,
+    description: ''
+  }
+}
+
+function cancelConvert() {
+  convertDialog.value.show = false
+}
+
+async function executeConvert() {
+  const tagName = convertDialog.value.tagName
+  const description = convertDialog.value.description.trim()
+
+  if (!confirm(`确定要将用户标签 "${tagName}" 转换为系统标签吗？\n转换后该标签将可用于 LLM 自动生成标签。`)) {
     return
   }
 
+  try {
+    const response = await fetch(`${API_BASE}/system-tags/convert`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tag_name: tagName, description: description || null })
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || `HTTP ${response.status}`)
+    }
+
+    const result = await response.json()
+    showSuccess(result.message || '转换成功')
+
+    await loadAllTags()
+    convertDialog.value.show = false
+    currentTab.value = 'system' // 切换到系统标签页
+    emit('tags-updated')
+  } catch (error) {
+    console.error('转换标签失败:', error)
+    showError(`转换标签失败: ${error.message}`)
+  }
+}
+
+// 重命名系统标签
+function startRenameSystemTag(tag) {
+  renameSystemTagDialog.value = {
+    show: true,
+    oldName: tag.tag_name,
+    newName: ''
+  }
+}
+
+function cancelRenameSystemTag() {
+  renameSystemTagDialog.value.show = false
+}
+
+async function executeRenameSystemTag() {
+  const oldName = renameSystemTagDialog.value.oldName
+  const newName = renameSystemTagDialog.value.newName.trim()
+
+  if (!newName) {
+    showWarning('请输入新标签名')
+    return
+  }
+
+  if (oldName === newName) {
+    showWarning('新旧标签名称相同')
+    return
+  }
+
+  if (!confirm(`确定要将系统标签 "${oldName}" 重命名为 "${newName}" 吗？`)) {
+    return
+  }
 
   try {
-    const response = await fetch(`${API_BASE}/tags/create`, {
+    const response = await fetch(`${API_BASE}/system-tags/${encodeURIComponent(oldName)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tag_name: newName })
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || `HTTP ${response.status}`)
+    }
+
+    const result = await response.json()
+    showSuccess(result.message || '重命名成功')
+
+    await loadAllTags()
+    renameSystemTagDialog.value.show = false
+    emit('tags-updated')
+  } catch (error) {
+    console.error('重命名系统标签失败:', error)
+    showError(`重命名系统标签失败: ${error.message}`)
+  }
+}
+
+// 删除系统标签
+async function confirmDeleteSystemTag(tag) {
+  if (!confirm(`确定要删除系统标签 "${tag.tag_name}" 吗？\n该标签将不再可用于 LLM 自动生成标签。\n注意：这不会删除已有 chunk 中的标签。`)) {
+    return
+  }
+
+  try {
+    const response = await fetch(`${API_BASE}/system-tags/${encodeURIComponent(tag.tag_name)}`, {
+      method: 'DELETE'
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || `HTTP ${response.status}`)
+    }
+
+    const result = await response.json()
+    showSuccess(result.message || '删除成功')
+
+    await loadAllTags()
+    emit('tags-updated')
+  } catch (error) {
+    console.error('删除系统标签失败:', error)
+    showError(`删除系统标签失败: ${error.message}`)
+  }
+}
+
+// 删除用户标签或文档标签
+async function confirmDelete(tag) {
+  const tagName = tag.name
+  const count = tag.count || tag.document_count || 0
+
+  if (!confirm(`确定要删除标签 "${tagName}" 吗？\n这将从 ${count} 个切片/文档中删除该标签。\n此操作不可撤销！`)) {
+    return
+  }
+
+  try {
+    const response = await fetch(`${API_BASE}/tags/delete`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tag_name: tagName })
@@ -372,220 +577,13 @@ async function executeAddTag() {
     }
 
     const result = await response.json()
-    showSuccess(result.message)
+    showSuccess(result.message || '删除成功')
 
-    // 重新加载标签
-    await loadTags()
-    addTagDialog.value.show = false
+    await loadAllTags()
     emit('tags-updated')
   } catch (error) {
-    console.error('创建标签失败:', error)
-    showError(`创建标签失败: ${error.message}`)
-  }
-}
-
-function startRename(tag) {
-  renameDialog.value = {
-    show: true,
-    oldName: tag.name,
-    newName: '',
-    count: tag.count
-  }
-}
-
-function cancelRename() {
-  renameDialog.value.show = false
-}
-
-async function executeRename() {
-  const oldName = renameDialog.value.oldName
-  const newName = renameDialog.value.newName.trim()
-
-  if (!newName) return
-
-  if (oldName === newName) {
-    showWarning('新旧标签名称相同')
-    return
-  }
-
-  if (!confirm(`确定要将标签 "${oldName}" 重命名为 "${newName}" 吗？\n这将影响 ${renameDialog.value.count} 个切片。`)) {
-    return
-  }
-
-  try {
-    const response = await fetch(`${API_BASE}/tags/rename`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ old_name: oldName, new_name: newName })
-    })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.detail || `HTTP ${response.status}`)
-    }
-
-    const result = await response.json()
-    showSuccess(result.message)
-
-    // 重新加载标签
-    await loadTags()
-    renameDialog.value.show = false
-    emit('tags-updated')
-  } catch (error) {
-    console.error('重命名失败:', error)
-    showError(`重命名失败: ${error.message}`)
-  }
-}
-
-async function confirmDelete(tag) {
-  if (!confirm(`确定要删除标签 "${tag.name}" 吗？\n这将从 ${tag.count} 个切片中删除该标签。\n此操作不可撤销！`)) {
-    return
-  }
-
-  try {
-    const response = await fetch(`${API_BASE}/tags/delete`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tag_name: tag.name })
-    })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.detail || `HTTP ${response.status}`)
-    }
-
-    const result = await response.json()
-    showSuccess(result.message)
-
-    // 重新加载标签
-    await loadTags()
-    emit('tags-updated')
-  } catch (error) {
-    console.error('删除失败:', error)
-    showError(`删除失败: ${error.message}`)
-  }
-}
-
-async function showBatchDeleteConfirm() {
-  if (selectedTags.value.length === 0) {
-    showWarning('请先选择要删除的标签')
-    return
-  }
-
-  // 计算总影响数
-  const totalChunks = selectedTags.value.reduce((sum, tagName) => {
-    const tag = tags.value.find(t => t.name === tagName)
-    return sum + (tag?.count || 0)
-  }, 0)
-
-  if (!confirm(
-    `⚠️ 批量删除标签\n\n` +
-    `将删除以下 ${selectedTags.value.length} 个标签：\n` +
-    `${selectedTags.value.join(', ')}\n\n` +
-    `预计影响约 ${totalChunks} 个切片\n\n` +
-    `此操作不可撤销！确定要继续吗？`
-  )) {
-    return
-  }
-
-  try {
-    let successCount = 0
-    let failCount = 0
-    const errors = []
-
-    // 逐个删除标签
-    for (const tagName of selectedTags.value) {
-      try {
-        const response = await fetch(`${API_BASE}/tags/delete`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tag_name: tagName })
-        })
-
-        if (!response.ok) {
-          const error = await response.json()
-          throw new Error(error.detail || `HTTP ${response.status}`)
-        }
-
-        successCount++
-      } catch (error) {
-        failCount++
-        errors.push(`${tagName}: ${error.message}`)
-      }
-    }
-
-    // 显示结果
-    let message = `批量删除完成\n\n成功: ${successCount} 个`
-    if (failCount > 0) {
-      message += `\n失败: ${failCount} 个\n\n失败详情:\n${errors.join('\n')}`
-      showWarning(message)
-    } else {
-      showSuccess(message)
-    }
-
-    // 重新加载标签并清除选择
-    await loadTags()
-    clearSelection()
-    emit('tags-updated')
-  } catch (error) {
-    console.error('批量删除失败:', error)
-    showError(`批量删除失败: ${error.message}`)
-  }
-}
-
-async function executeMerge() {
-  const targetName = mergeTargetName.value.trim()
-
-  if (!targetName) {
-    showWarning('请输入合并后的标签名')
-    return
-  }
-
-  if (selectedTags.value.length < 2) {
-    showWarning('至少选择 2 个标签才能合并')
-    return
-  }
-
-  // 计算总影响数
-  const totalChunks = selectedTags.value.reduce((sum, tagName) => {
-    const tag = tags.value.find(t => t.name === tagName)
-    return sum + (tag?.count || 0)
-  }, 0)
-
-  if (!confirm(
-    `确定要将以下 ${selectedTags.value.length} 个标签合并为 "${targetName}" 吗？\n\n` +
-    `标签: ${selectedTags.value.join(', ')}\n` +
-    `预计影响约 ${totalChunks} 个切片\n\n` +
-    `此操作不可撤销！`
-  )) {
-    return
-  }
-
-  try {
-    const response = await fetch(`${API_BASE}/tags/merge`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        source_tags: selectedTags.value,
-        target_tag: targetName
-      })
-    })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.detail || `HTTP ${response.status}`)
-    }
-
-    const result = await response.json()
-    showSuccess(result.message)
-
-    // 重新加载标签并清除选择
-    await loadTags()
-    clearSelection()
-    emit('tags-updated')
-  } catch (error) {
-    console.error('合并失败:', error)
-    showError(`合并失败: ${error.message}`)
+    console.error('删除标签失败:', error)
+    showError(`删除标签失败: ${error.message}`)
   }
 }
 
@@ -613,7 +611,7 @@ function close() {
   background: white;
   border-radius: 12px;
   width: 90%;
-  max-width: 800px;
+  max-width: 900px;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
@@ -649,6 +647,49 @@ function close() {
 
 .close-btn:hover {
   color: #e74c3c;
+}
+
+.tab-switcher {
+  display: flex;
+  border-bottom: 1px solid #e1e8ed;
+  background: #f8f9fa;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 12px 16px;
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  font-size: 14px;
+  font-weight: 600;
+  color: #7f8c8d;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.tab-btn:hover {
+  background: #ecf0f1;
+  color: #2c3e50;
+}
+
+.tab-btn.active {
+  color: #3498db;
+  border-bottom-color: #3498db;
+  background: white;
+}
+
+.tab-description {
+  padding: 12px 24px;
+  background: #e3f2fd;
+  border-bottom: 1px solid #bbdefb;
+}
+
+.tab-description p {
+  margin: 0;
+  font-size: 13px;
+  color: #1565c0;
+  line-height: 1.6;
 }
 
 .toolbar {
@@ -692,11 +733,6 @@ function close() {
   align-items: center;
 }
 
-.selected-count {
-  color: #3498db;
-  font-weight: 600;
-}
-
 .add-tag-btn {
   background: #27ae60;
   color: white;
@@ -707,9 +743,6 @@ function close() {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  gap: 4px;
 }
 
 .add-tag-btn:hover {
@@ -747,27 +780,18 @@ function close() {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px;
+  padding: 14px 16px;
   border: 1px solid #e1e8ed;
   border-radius: 8px;
   margin-bottom: 8px;
   transition: all 0.2s;
+  background: white;
 }
 
 .tag-item:hover {
   background: #f8f9fa;
   border-color: #3498db;
-}
-
-.tag-item.selected {
-  background: #e3f2fd;
-  border-color: #2196f3;
-}
-
-.tag-checkbox {
-  width: 18px;
-  height: 18px;
-  cursor: pointer;
+  transform: translateX(4px);
 }
 
 .tag-info {
@@ -775,35 +799,37 @@ function close() {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .tag-name {
   font-size: 15px;
-  font-weight: 500;
+  font-weight: 600;
   color: #2c3e50;
 }
 
 .tag-badge {
-  padding: 3px 10px;
+  padding: 4px 12px;
   border-radius: 12px;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
-.tag-badge.type-user_tag {
+.system-badge {
   background: #d4edff;
-  color: #1976d2;
+  color: #0d47a1;
 }
 
-.tag-badge.type-content_tag {
+.user-badge {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.doc-badge {
   background: #d4f4dd;
-  color: #2e7d32;
-}
-
-.tag-badge.type-both {
-  background: #e1d4f4;
-  color: #6a1b9a;
+  color: #1b5e20;
 }
 
 .tag-count {
@@ -811,23 +837,44 @@ function close() {
   color: #7f8c8d;
 }
 
+.tag-description {
+  font-size: 12px;
+  color: #95a5a6;
+  font-style: italic;
+  flex-basis: 100%;
+  margin-top: -4px;
+}
+
 .tag-actions {
   display: flex;
-  gap: 6px;
+  gap: 8px;
 }
 
 .action-btn {
   background: white;
   border: 1px solid #ddd;
-  padding: 6px 10px;
+  padding: 6px 12px;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
+  font-weight: 600;
   transition: all 0.2s;
+  white-space: nowrap;
 }
 
 .action-btn:hover {
-  transform: scale(1.1);
+  transform: scale(1.05);
+}
+
+.convert-btn {
+  background: #9b59b6;
+  color: white;
+  border-color: #8e44ad;
+}
+
+.convert-btn:hover {
+  background: #8e44ad;
+  box-shadow: 0 2px 8px rgba(155, 89, 182, 0.3);
 }
 
 .rename-btn:hover {
@@ -838,6 +885,7 @@ function close() {
 .delete-btn:hover {
   background: #ffebee;
   border-color: #e74c3c;
+  color: #e74c3c;
 }
 
 .empty-state {
@@ -846,163 +894,29 @@ function close() {
   color: #95a5a6;
 }
 
-.batch-panel {
-  border-top: 2px solid #3498db;
-  padding: 20px 24px;
-  background: #f8f9fa;
-}
-
-.batch-header {
+.dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-}
-
-.batch-header h3 {
-  margin: 0;
-  font-size: 16px;
-  color: #2c3e50;
-}
-
-.batch-actions {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.batch-action-btn {
-  flex: 1;
-  padding: 10px 16px;
-  border: none;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
   justify-content: center;
-  gap: 6px;
+  align-items: center;
+  z-index: 4000;
 }
 
-.delete-batch-btn {
-  background: #e74c3c;
-  color: white;
-}
-
-.delete-batch-btn:hover:not(:disabled) {
-  background: #c0392b;
-}
-
-.merge-batch-btn {
-  background: #3498db;
-  color: white;
-}
-
-.merge-batch-btn:hover:not(:disabled) {
-  background: #2980b9;
-}
-
-.batch-action-btn:disabled {
-  background: #bdc3c7;
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-.merge-section {
-  margin-bottom: 16px;
-  padding: 16px;
+.dialog-box {
   background: white;
-  border-radius: 8px;
-  border: 2px solid #3498db;
-}
-
-.clear-btn {
-  background: white;
-  border: 1px solid #ddd;
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-size: 13px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.clear-btn:hover {
-  background: #ecf0f1;
-}
-
-.merge-hint {
-  font-size: 14px;
-  color: #7f8c8d;
-  margin: 0 0 12px 0;
-}
-
-.merge-input-group {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.merge-input {
-  flex: 1;
-  padding: 10px 12px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  font-size: 14px;
-}
-
-.merge-btn {
-  background: #3498db;
-  color: white;
-  border: none;
-  padding: 10px 24px;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.merge-btn:hover:not(:disabled) {
-  background: #2980b9;
-}
-
-.merge-btn:disabled {
-  background: #bdc3c7;
-  cursor: not-allowed;
-}
-
-.selected-tags-preview {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.selected-tag {
-  background: white;
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-size: 13px;
-  color: #2c3e50;
-  border: 1px solid #e1e8ed;
-}
-
-.rename-dialog {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  background: white;
-  padding: 24px;
+  padding: 28px;
   border-radius: 12px;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
   width: 90%;
-  max-width: 400px;
-  z-index: 10;
+  max-width: 450px;
 }
 
-.rename-dialog h3 {
+.dialog-box h3 {
   margin: 0 0 16px 0;
   font-size: 18px;
   color: #2c3e50;
@@ -1012,26 +926,35 @@ function close() {
   font-size: 14px;
   color: #7f8c8d;
   margin: 8px 0;
+  line-height: 1.5;
 }
 
 .dialog-hint strong {
   color: #2c3e50;
+  font-weight: 600;
 }
 
-.rename-input {
+.dialog-input {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid #ddd;
   border-radius: 6px;
   font-size: 14px;
-  margin: 16px 0;
+  margin: 12px 0;
   box-sizing: border-box;
+}
+
+.dialog-input:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
 }
 
 .dialog-actions {
   display: flex;
   gap: 12px;
   justify-content: flex-end;
+  margin-top: 20px;
 }
 
 .cancel-btn {
@@ -1062,10 +985,13 @@ function close() {
 
 .confirm-btn:hover:not(:disabled) {
   background: #2980b9;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(52, 152, 219, 0.3);
 }
 
 .confirm-btn:disabled {
   background: #bdc3c7;
   cursor: not-allowed;
+  opacity: 0.6;
 }
 </style>
